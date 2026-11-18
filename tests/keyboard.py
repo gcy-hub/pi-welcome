@@ -105,7 +105,7 @@ for history_count in [0, 1, 8]:
                     os.write(master, b"/pi-welcome themes\r")
                     wait_for("开机动画".encode(), start)
                     start = len(data)
-                    for key in [b"\x1b[B", b"\t"] + [b"\x1b[B"] * steps:
+                    for key in [b"\x1b[B", b"\t"] * 3 + [b"\x1b[B"] * steps:
                         os.write(master, key)
                         collect(0.2)
                     wait_for(expected_sgr, start)

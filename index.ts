@@ -1,12 +1,15 @@
 import { SessionManager, type ExtensionAPI, type ExtensionCommandContext, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { matchesKey, SelectList, type KeybindingsManager, type TUI } from "@earendil-works/pi-tui";
 import { ART, animationById, modulo, moveShape } from "./art.ts";
-import { DEFAULT_PREFERENCES, loadPalettes, loadPreferences, ORIGINAL, paletteColors, savePreferences, type Palette, type Preferences } from "./themes.ts";
+import { DEFAULT_PREFERENCES, ICON_NAMES, loadPalettes, loadPreferences, ORIGINAL, paletteColors, savePreferences, type Palette, type Preferences } from "./themes.ts";
 import { Canvas, drawScene, paintMenu, singleLine, welcomeLayout, type Item } from "./view.ts";
 export { welcomeLayout } from "./view.ts";
 
 type Session = Awaited<ReturnType<typeof SessionManager.list>>[number];
 const NEW_SESSION = "+new";
+const fields = ["first", "last", "animation", "palette"] as const;
+const headings = ["起始徽标", "结束符号", "开机动画", "主题配色"];
+const selectedClip = (p: Preferences) => animationById(p.animation, p.first, p.last);
 type Options = { palettes?: Palette[]; preferences?: Preferences; intent?: "themes"; save?: (preferences: Preferences) => Promise<void> };
 
 class MenuMotion {
@@ -69,12 +72,13 @@ export class WelcomeScreen {
 		this.items = sessions.length ? [...sessions.map((session) => ({ value: session.path, label: singleLine(session.name || session.firstMessage || "未命名会话") })), { value: NEW_SESSION, label: "+ 新建会话" }] : [];
 		this.list = this.createList(this.items, 5);
 		this.palettes = options.palettes ?? [ORIGINAL];
-		this.preferences = { ...(options.preferences ?? DEFAULT_PREFERENCES) };
+		this.preferences = { ...DEFAULT_PREFERENCES, ...options.preferences };
 		this.draft = { ...this.preferences };
 		this.stage = options.intent === "themes" ? "before-themes" : "sessions";
 		this.stageAt = this.previewAt = this.now();
-		this.themeItems = [ART.clips.map((clip) => ({ value: clip.id, label: `${clip.id} ${clip.name}` })), this.palettes.map((palette) => ({ value: palette.id, label: palette.name }))];
-		const indices = [this.themeItems[0].findIndex((item) => item.value === this.draft.animation), this.themeItems[1].findIndex((item) => item.value === this.draft.palette)];
+		this.themeItems = [ICON_NAMES.first, ICON_NAMES.last].map(names => names.map((label, i) => ({ value: String(i), label })));
+		this.themeItems.push(ART.clips.map(clip => ({ value: clip.id, label: `${clip.id} ${clip.name}` })), this.palettes.map(p => ({ value: p.id, label: p.name })));
+		const indices = fields.map((field, col) => this.themeItems[col].findIndex(item => item.value === this.draft[field]));
 		this.themeLists = this.themeItems.map((items, column) => { const list = this.createList(items, 8); list.setSelectedIndex(indices[column]); return list; });
 		this.themeMotions = indices.map((index) => new MenuMotion(index));
 	}
@@ -122,13 +126,13 @@ export class WelcomeScreen {
 			return;
 		}
 		if (this.stage === "after-themes") {
-			if (this.keybindings.matches(data, "tui.select.confirm")) { this.stage = "sessions"; this.stageAt = time - animationById(this.preferences.animation).duration; this.tui.requestRender(); }
+			if (this.keybindings.matches(data, "tui.select.confirm")) { this.stage = "sessions"; this.stageAt = time - selectedClip(this.preferences).duration; this.tui.requestRender(); }
 			return;
 		}
 		if (this.stage === "themes") {
 			if (this.keybindings.matches(data, "tui.select.confirm")) return this.confirmThemes();
 			if (matchesKey(data, "tab") || matchesKey(data, "shift+tab") || matchesKey(data, "left") || matchesKey(data, "right")) {
-				this.column = 1 - this.column;
+				this.column = modulo(this.column + (matchesKey(data, "left") || matchesKey(data, "shift+tab") ? -1 : 1), fields.length);
 				this.tui.requestRender();
 				return;
 			}
@@ -145,7 +149,7 @@ export class WelcomeScreen {
 			const wrap = (after < before && this.keybindings.matches(data, "tui.select.down")) || (after > before && this.keybindings.matches(data, "tui.select.up"));
 			motion.move(after, time, picker ? this.themeRows : this.listRows, items.length, wrap);
 			if (picker) {
-				this.draft[this.column === 0 ? "animation" : "palette"] = items[after].value;
+				this.draft[fields[this.column]] = items[after].value;
 				this.previewAt = time;
 			}
 		}
@@ -156,9 +160,9 @@ export class WelcomeScreen {
 		const palette = this.palettes.find((item) => item.id === this.draft.palette)!;
 		const colors = paletteColors(palette, this.theme);
 		const canvas = new Canvas(width, height, this.theme, colors);
-		const first = width >= 72 ? 20 : Math.max(3, Math.floor(width * 0.24));
-		const second = width >= 96 ? 24 : Math.max(3, Math.floor(width * 0.25));
-		const previewX = Math.min(width - 1, first + second + 3);
+		const columns = width >= 76 ? [0, 1, 2, 3] : [this.column];
+		const colWidth = columns.length === 1 ? Math.min(18, Math.max(6, Math.floor(width * .44))) : Math.min(19, Math.floor(width * .15));
+		const previewX = Math.min(width - 1, 1 + columns.length * colWidth);
 		const previewWidth = Math.max(1, width - previewX - 1);
 		const rows = Math.max(1, height - 8);
 		if (rows !== this.themeRows) {
@@ -172,15 +176,14 @@ export class WelcomeScreen {
 			this.themeRows = rows;
 		}
 		canvas.text(1, 1, this.theme.style("欢迎页 · 动画与配色", { fg: colors.text }), width - 2);
-		for (let column = 0; column < 2; column++) {
-			const x = column === 0 ? 1 : first + 2;
-			const columns = column === 0 ? first - 1 : second - 1;
-			canvas.text(x, 3, this.theme.style(column === 0 ? "开机动画" : "主题配色", { fg: this.column === column ? colors.accent : colors.muted }), columns);
-			paintMenu(canvas, this.themeItems[column], x, 5, columns, Math.min(rows, this.themeItems[column].length), 1, this.themeMotions[column].value(time));
+		for (const [i, column] of columns.entries()) {
+			const x = 1 + i * colWidth;
+			canvas.text(x, 3, this.theme.style(headings[column], { fg: this.column === column ? colors.accent : colors.muted }), colWidth - 1);
+			paintMenu(canvas, this.themeItems[column], x, 5, colWidth - 1, Math.min(rows, this.themeItems[column].length), 1, this.themeMotions[column].value(time));
+			for (let y = 3; y < height - 3; y++) canvas.cell(x + colWidth - 1, y, "│", colors.border ?? colors.muted);
 		}
-		for (const x of [first + 1, previewX - 1]) for (let y = 3; y < height - 3; y++) canvas.cell(x, y, "│", colors.border ?? colors.muted);
 		canvas.text(previewX, 3, this.theme.style("实时预览 · 循环播放", { fg: colors.accent }), previewWidth);
-		const clip = animationById(this.draft.animation);
+		const clip = selectedClip(this.draft);
 		const demo = [1, 2, 3].map((index) => ({ value: `demo-${index}`, label: `会话 ${index}` }));
 		const preview = drawScene(previewWidth, Math.max(1, height - 7), this.theme, colors, clip, modulo(time - this.previewAt, clip.duration), this.cwd, demo, { cursor: 0, top: 0, bottom: 0, scroll: 0 }, "循环预览");
 		preview.forEach((line, row) => canvas.text(previewX, row + 4, line, previewWidth));
@@ -192,10 +195,10 @@ export class WelcomeScreen {
 	render(width: number): string[] {
 		if (!this.timer && !this.disposed) { this.timer = setInterval(() => this.tui.requestRender(), 33); this.timer.unref(); }
 		const time = this.now(), height = Math.max(1, this.tui.terminal.rows);
-		const clip = animationById(this.preferences.animation);
-		if (this.stage === "before-themes" && time - this.stageAt >= clip.duration) this.openThemes(time);
-		if (this.stage === "after-themes" && time - this.stageAt >= clip.duration) this.stage = "sessions";
 		if (this.stage === "themes") return this.renderThemes(width, height, time);
+		const clip = selectedClip(this.preferences);
+		if (this.stage === "before-themes" && time - this.stageAt >= clip.duration) { this.openThemes(time); return this.renderThemes(width, height, time); }
+		if (this.stage === "after-themes" && time - this.stageAt >= clip.duration) this.stage = "sessions";
 		const palette = this.palettes.find((item) => item.id === this.preferences.palette)!;
 		const rows = width >= 14 && height >= 12 ? Math.max(1, welcomeLayout(width, height, this.items.length).slots) : Math.max(1, height - 3);
 		if (rows !== this.listRows) {

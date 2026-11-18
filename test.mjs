@@ -45,7 +45,8 @@ try {
 	assert.equal(palettes.find((item) => item.name === "纸白荧紫").background, "#F4F2F9");
 	const path = join(root, "preferences.json");
 	assert.deepEqual(await loadPreferences(palettes, path), DEFAULT_PREFERENCES);
-	const choice = { animation: "08", palette: "纸白荧紫" };
+	assert.deepEqual(validatePreferences({ animation: "03", palette: "冰蓝橙" }, palettes), { first: "0", last: "0", animation: "03", palette: "冰蓝橙" });
+	const choice = { first: "6", last: "4", animation: "08", palette: "纸白荧紫" };
 	await savePreferences(choice, path);
 	assert.deepEqual(await loadPreferences(palettes, path), choice);
 	assert.throws(() => validatePreferences({ animation: "09", palette: "original" }, palettes));
@@ -56,6 +57,21 @@ try {
 	for (const x of [0, 0.2, 0.8, 1]) assert.equal(colorToHex(flowingColor(x, 400)), colorToHex(flowingColor(x, 400 + COLOR_PERIOD_MS)));
 	assert.equal(colorToHex(flowingColor(1.25 - 1e-8, 0)), colorToHex(flowingColor(0, 0)));
 	assert.equal(ART.clips.length, 8);
+	for (const base of ART.clips) {
+		assert.equal(animationById(base.id, "0", "0"), base);
+		const starts = new Set(), ends = new Set();
+		for (let n = 1; n <= 6; n++) {
+			const first = animationById(base.id, String(n), "0"), last = animationById(base.id, "0", String(n));
+			starts.add(first.frames[0].ink); ends.add(last.frames.at(-1).ink);
+			assert.equal(first.frames.at(-1).ink, base.frames.at(-1).ink);
+			if (["02", "03", "04"].includes(base.id)) assert.equal(last.frames[0].ink, base.frames[0].ink);
+			const both = animationById(base.id, String(n), String(n));
+			assert.equal(both.frames[0].ink, first.frames[0].ink);
+			assert.equal(both.frames.at(-1).ink, last.frames.at(-1).ink);
+			assert(menuAt(both) < both.duration && both.frames.at(-1).menu);
+		}
+		assert.equal(starts.size, 6); assert.equal(ends.size, 6);
+	}
 	for (const id of ["05", "06", "07"]) for (const frame of animationById(id).frames) {
 		const [x, y, right, bottom] = frame.box, stride = right - x;
 		for (let row = Math.max(91, y); row < bottom && right > 254; row++) {
@@ -203,6 +219,8 @@ try {
 	assert(!plain(editor.at(0)).join("").includes("开机动画"));
 	let chooser = editor.at(clip.duration);
 	assert(plain(chooser).join("").includes("开机动画") && plain(chooser).join("").includes("主题配色"));
+	for (const heading of ["起始徽标", "结束符号"]) assert(plain(chooser).join("").includes(heading));
+	for (let i = 0; i < 2; i++) { editor.screen.handleInput("\x1b[B"); editor.screen.handleInput("\t"); }
 	editor.screen.handleInput("\x1b[B");
 	editor.screen.handleInput("\t");
 	editor.screen.handleInput("\x1b[B");
@@ -210,7 +228,7 @@ try {
 	assert(chooser[0].includes("48;2;11;17;27"), "selected theme must immediately change preview background to its exact Markdown value");
 	assert.notDeepEqual(chooser, editor.at(clip.duration + 500), "preview must keep playing");
 	await editor.screen.handleInput("\r");
-	assert.deepEqual(saved, [{ animation: "03", palette: "极光青紫" }]);
+	assert.deepEqual(saved, [{ first: "1", last: "1", animation: "03", palette: "极光青紫" }]);
 	assert.equal(editor.selected(), "pending");
 	assert(!plain(editor.at(clip.duration + 501)).join("").includes("开机动画"), "confirmation must replay the chosen startup animation");
 	editor.at(clip.duration + 500 + animationById("03").duration);

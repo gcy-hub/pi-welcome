@@ -4,8 +4,12 @@ import { getAgentDir, type Theme } from "@earendil-works/pi-coding-agent";
 import { colorToRgb, mixColors, parseColor } from "@earendil-works/pi-tui";
 
 export type Palette = { id: string; name: string; background?: string; border?: string; selection?: string; accent: string; gradient: string[]; stops?: number[] };
-export type Preferences = { animation: string; palette: string };
-export const DEFAULT_PREFERENCES: Preferences = { animation: "02", palette: "original" };
+export const ICON_NAMES = {
+	first: ["原始徽标", "终端指令", "分支节点", "Agent 芯片", "像素史莱姆", "像素幽灵", "机甲猫"],
+	last: ["原始 π", "方块 π", "阶梯 π", "终端指令", "代码括号", "Agent 面罩", "像素闪电"],
+};
+export type Preferences = { first: string; last: string; animation: string; palette: string };
+export const DEFAULT_PREFERENCES: Preferences = { first: "0", last: "0", animation: "02", palette: "original" };
 export const ORIGINAL: Palette = {
 	id: "original", name: "原始蓝紫 · 自适应", accent: "#AEABFF",
 	gradient: ["#97A9FF", "#AEABFF", "#9E88FF", "#8857F9", "#8344EA", "#7B48EC", "#7655F4"],
@@ -32,9 +36,10 @@ export async function loadPalettes(): Promise<Palette[]> {
 
 export function validatePreferences(value: unknown, palettes: Palette[]): Preferences {
 	if (!value || typeof value !== "object") throw new Error("欢迎页设置必须是对象");
-	const { animation = "02", palette = "original" } = value as Partial<Preferences>;
+	const { first = "0", last = "0", animation = "02", palette = "original" } = value as Partial<Preferences>;
+	if (![first,last].every(id => typeof id === "string" && /^[0-6]$/.test(id))) throw new Error("欢迎页设置中的图标不存在");
 	if (typeof animation !== "string" || !/^0[1-8]$/.test(animation) || !palettes.some((item) => item.id === palette)) throw new Error("欢迎页设置中的动画或配色不存在");
-	return { animation, palette };
+	return { first, last, animation, palette };
 }
 
 export async function loadPreferences(palettes: Palette[], path = preferencesPath()): Promise<Preferences> {

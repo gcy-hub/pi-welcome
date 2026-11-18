@@ -25,10 +25,31 @@ export function flowingColor(position: number, elapsed: number, colors: { gradie
 	return phase <= 1 ? gradientColor(phase, colors) : mixColors(colors.gradient.at(-1)!, colors.gradient[0], (phase - 1) / 0.25, "srgb");
 }
 
-export function animationById(id: string) {
+let comboKey = "", combo: Animation;
+function segment(name: string): Frame[] {
+	return JSON.parse(gunzipSync(readFileSync(new URL(`./assets/icons/frames/${name}.json.gz`, import.meta.url))).toString());
+}
+
+export function animationById(id: string, first = "0", last = "0") {
 	const clip = ART.clips.find((item) => item.id === id);
 	if (!clip) throw new Error(`开机动画不存在：${id}`);
-	return clip;
+	if (first === "0" && last === "0") return clip;
+	const key = `${id}:${first}:${last}`;
+	if (key === comboKey) return combo;
+	const particle = ["02", "03", "04"].includes(id);
+	const prefix = first === "0" ? [] : segment(`first-${first}`);
+	const offset = !particle && prefix.length ? 800 : 0;
+	const reveal = menuAt(clip);
+	let frames = clip.frames;
+	if (last !== "0") {
+		const end = segment(`last-${last}-${id}`);
+		frames = [...frames.filter(f => f.at < end[0].at), ...end];
+		if (frames.at(-1)!.at < reveal) frames.push({ ...frames.at(-1)!, at: reveal });
+	}
+	frames = frames.filter(f => !particle || !prefix.length || f.at >= 800).map(f => ({ ...f, at: f.at + offset, menu: f.at >= reveal }));
+	combo = { ...clip, duration: clip.duration + offset, frames: [...prefix, ...frames] };
+	comboKey = key;
+	return combo;
 }
 
 export function frameAt(clip: Animation, elapsed: number) {
