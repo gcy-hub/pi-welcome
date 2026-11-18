@@ -18,7 +18,9 @@ def masks(side):
     img = Image.open(ROOT / 'icons' / f'pi-tui-{side}-icons.png').convert('RGB')
     # The references use a saturated violet foreground; exclude badges, labels and UI.
     r, g, b = np.array(img, dtype=int).transpose(2, 0, 1)
-    alpha = Image.fromarray(np.where((b-g > 60) & (b-r > 35), 130 + g * .66, 0).astype('uint8'))
+    # Final glyphs are solid silhouettes. Badges also use stepped shading for facial details.
+    tone = np.where(g < 68, 140, np.where(g < 105, 194, 255)) if side == 'first' else 255
+    alpha = Image.fromarray(np.where((b-g > 60) & (b-r > 35), tone, 0).astype('uint8'))
     if side == 'first':
         boxes = [(x-71, y-70, x+71, y+70) for y in [208, 511] for x in [167, 503, 839]]
     else:
@@ -26,8 +28,7 @@ def masks(side):
     for box in boxes:
         icon = alpha.crop(box)
         icon = icon.crop(icon.getbbox())
-        icon.thumbnail((24, 24), Image.Resampling.BOX)
-        yield np.array(icon)
+        yield icon
 
 
 def frame(image, t, circle=None):
@@ -49,18 +50,33 @@ def eased(t):
 
 
 def paint(icon, cx, cy, width, height, scatter=0, effect='', progress=1):
-    h,w = icon.shape
-    unit = min(width/w, height/h)
-    img = Image.new('L', (500,313)); draw = ImageDraw.Draw(img)
-    for y,x in zip(*np.where(icon>55)):
-        if effect=='scan' and y+.5 > h*progress or effect=='write' and x+.5 > w*progress: continue
-        px,py = cx+(x+.5-w/2)*unit, cy+(y+.5-h/2)*unit
-        if effect=='slice': px += (1 if y//3%2 else -1)*105*(1-progress)
-        if scatter:
-            a,b = cloud[(int(y)*71+int(x)*131)%len(cloud)]
-            px += (a-px)*scatter; py += (b-py)*scatter
-        radius = (unit*(1-scatter)+2*scatter)/2
-        draw.rectangle((round(px-radius),round(py-radius),round(px+radius)-1,round(py+radius)-1), fill=int(icon[y,x]))
+    scale = min(width/icon.width, height/icon.height)
+    w,h = round(icon.width*scale), round(icon.height*scale)
+    stamp = icon.resize((w,h), Image.Resampling.BOX if scale < 1 else Image.Resampling.NEAREST)
+    left,top = round(cx-w/2),round(cy-h/2)
+    img = Image.new('L', (500,313))
+    if not scatter:
+        if effect=='slice' and progress<1:
+            band=max(1,round(max(w,h)/8))
+            for y in range(0,h,band):
+                offset=round((1 if y//band%2 else -1)*105*(1-progress))
+                img.paste(stamp.crop((0,y,w,min(h,y+band))), (left+offset,top+y))
+        else:
+            right=round(w*progress) if effect=='write' else w
+            bottom=round(h*progress) if effect=='scan' else h
+            img.paste(stamp.crop((0,0,right,bottom)), (left,top))
+        return img
+    # Split the full-detail stamp into moving particles, not the other way around.
+    step=max(1,round(max(w,h)/24))
+    for y in range(0,h,step):
+        for x in range(0,w,step):
+            tile=stamp.crop((x,y,min(x+step,w),min(y+step,h)))
+            if not tile.getbbox(): continue
+            a,b=cloud[(y//step*71+x//step*131)%len(cloud)]
+            px,py=left+x+tile.width/2,top+y+tile.height/2
+            tile=tile.resize(tuple(round(v+(2-v)*scatter) for v in tile.size), Image.Resampling.BOX)
+            pos=(round(px+(a-px)*scatter-tile.width/2),round(py+(b-py)*scatter-tile.height/2))
+            img.paste(tile,pos,tile.point(lambda v: 255 if v else 0))
     return img
 
 

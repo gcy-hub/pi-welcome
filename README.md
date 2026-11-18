@@ -9,19 +9,19 @@
 已在 Pi 1.5.0 的交互模式下测试。推荐用 Pi 从 GitHub 安装固定版本：
 
 ```sh
-pi install git:github.com/gcy-hub/pi-welcome@v1.1.0
+pi install git:github.com/gcy-hub/pi-welcome@v1.1.1
 ```
 
 重新启动 `pi` 即可看到欢迎页。若已打开 Pi，可先执行 `/reload`，再输入 `/welcome`。
 
-**离线安装：** 下载 [pi-welcome-1.1.0.zip](https://github.com/gcy-hub/pi-welcome/releases/download/v1.1.0/pi-welcome-1.1.0.zip)，解压到准备长期保留的目录，再从其上一级运行：
+**离线安装：** 下载 [pi-welcome-1.1.1.zip](https://github.com/gcy-hub/pi-welcome/releases/download/v1.1.1/pi-welcome-1.1.1.zip)，解压到准备长期保留的目录，再从其上一级运行：
 
 ```sh
-unzip pi-welcome-1.1.0.zip
-pi install ./pi-welcome-1.1.0
+unzip pi-welcome-1.1.1.zip
+pi install ./pi-welcome-1.1.1
 ```
 
-本地路径安装会直接使用解压目录，请保留它。若之前已手动安装到 `~/.pi/agent/extensions/pi-welcome/`，请只保留一种安装方式，避免重复注册命令。卸载 GitHub 版本：`pi remove git:github.com/gcy-hub/pi-welcome@v1.1.0`。
+本地路径安装会直接使用解压目录，请保留它。若之前已手动安装到 `~/.pi/agent/extensions/pi-welcome/`，请只保留一种安装方式，避免重复注册命令。卸载 GitHub 版本：`pi remove git:github.com/gcy-hub/pi-welcome@v1.1.1`。
 
 ## 选择会话
 
