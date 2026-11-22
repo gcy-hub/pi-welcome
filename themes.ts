@@ -56,18 +56,21 @@ export async function savePreferences(preferences: Preferences, path = preferenc
 	await rename(temporary, path);
 }
 
+function isLight(color: ReturnType<typeof parseColor>) {
+	const { r, g, b } = colorToRgb(color);
+	return r * 0.299 + g * 0.587 + b * 0.114 > 160;
+}
+
 export function paletteColors(palette: Palette, theme: Theme) {
-	const background = palette.background ? parseColor(palette.background) : undefined;
-	const base = background ?? theme.colors.customMessageBg;
-	const { r, g, b } = colorToRgb(base);
-	const light = (r * 0.299 + g * 0.587 + b * 0.114) > 160;
+	const base = theme.colors.customMessageBg;
 	const accent = parseColor(palette.accent);
+	const selection = palette.selection ? parseColor(palette.selection) : isLight(base) ? mixColors(base, accent, 0.35, "srgb") : parseColor("#352858");
 	return {
-		background, base, accent,
+		base, accent,
 		border: palette.border ? parseColor(palette.border) : undefined,
-		selection: palette.selection ? parseColor(palette.selection) : light ? mixColors(base, accent, 0.35, "srgb") : parseColor("#352858"),
-		text: background ? parseColor(light ? "#20202A" : "#E8E8EE") : theme.colors.text,
-		muted: background ? parseColor(light ? "#626270" : "#A0A0AA") : theme.colors.muted,
+		selection,
+		text: theme.colors.text, muted: theme.colors.muted,
+		selectedText: palette.selection ? parseColor(isLight(selection) ? "#20202A" : "#E8E8EE") : theme.colors.text,
 		gradient: palette.gradient.map(parseColor),
 		stops: palette.stops ?? palette.gradient.map((_, index) => index / (palette.gradient.length - 1)),
 	};

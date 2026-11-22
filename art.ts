@@ -3,7 +3,7 @@ import { gunzipSync } from "node:zlib";
 import { mixColors, parseColor, type Color } from "@earendil-works/pi-tui";
 import { ORIGINAL } from "./themes.ts";
 
-export type Frame = { at: number; box: number[]; ink: string; circle: string; menu: boolean };
+export type Frame = { at: number; box: number[]; ink: string; circle: string; menu: boolean; solid?: boolean; badge?: boolean };
 export type Animation = { id: string; name: string; duration: number; frames: Frame[] };
 export type Point = { x: number; y: number };
 export type BorderCell = Point & { char: string };
@@ -37,12 +37,12 @@ export function animationById(id: string, first = "0", last = "0") {
 	const key = `${id}:${first}:${last}`;
 	if (key === comboKey) return combo;
 	const particle = ["02", "03", "04"].includes(id);
-	const prefix = first === "0" ? [] : segment(`first-${first}`);
+	const prefix = first === "0" ? [] : segment(`first-${first}`).map(f => ({ ...f, badge: f.at <= 320 }));
 	const offset = !particle && prefix.length ? 800 : 0;
 	const reveal = menuAt(clip);
 	let frames = clip.frames;
 	if (last !== "0") {
-		const end = segment(`last-${last}-${id}`);
+		const end = segment(`last-${last}-${id}`).map(f => ({ ...f, solid: !particle || f.at >= 1250 }));
 		frames = [...frames.filter(f => f.at < end[0].at), ...end];
 		if (frames.at(-1)!.at < reveal) frames.push({ ...frames.at(-1)!, at: reveal });
 	}

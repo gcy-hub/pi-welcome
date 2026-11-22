@@ -152,12 +152,39 @@ try {
 	const layout = welcomeLayout(118, 32, 2);
 	// With only black and white inputs, gray at an edge must come from fractional coverage.
 	const black = parseColor("#000000"), white = parseColor("#ffffff");
-	const bw = { base: black, background: black, selection: white, accent: white, text: white, muted: white, border: white, gradient: [white, white], stops: [0, 1] };
+	const bw = { base: black, selection: white, selectedText: white, accent: white, text: white, muted: white, border: white, gradient: [white, white], stops: [0, 1] };
 	const sample = drawScene(118, 32, theme, bw, clip, clip.duration, "/cwd", [{ label: "", value: "1" }, { label: "", value: "2" }], { cursor: 0, scroll: 0, top: 0, bottom: 0 }, "");
 	const gray = (line) => [...line.matchAll(/\x1b\[(?:38|48);2;(\d+);(\d+);(\d+)m/g)].some(([,r,g,b]) => r === g && g === b && +r > 0 && +r < 255);
 	assert(sample.slice(layout.top, layout.menuTop).some(gray), "pi edges must have antialiasing");
+	const stepped = animationById("02", "5", "2");
+	const settled = drawScene(118, 32, theme, bw, stepped, stepped.duration, "/cwd", [], { cursor: 0, scroll: 0, top: 0, bottom: 0 }, "");
+	const iconTop = welcomeLayout(118, 32, 0).top;
+	const glyphRows = settled.slice(iconTop, iconTop + layout.logoRows);
+	assert(glyphRows.some(line => /[▏▎▍▋▊▉▁▂▃▅▆▇▘▝▀▖▌▞▛]/.test(plain([line])[0])), "stepped pi must retain sub-cell edges");
+	assert(!glyphRows.some(gray), "solid glyph edges must not add a tinted fringe");
+	for (const [width, height] of [[36, 16], [50, 24], [118, 32]]) {
+		const particleFrames = [680, 760, 800, 950, 1100].map(t => {
+			const lines = drawScene(width, height, theme, bw, stepped, t, "/cwd", [], { cursor: 0, scroll: 0, top: 0, bottom: 0 }, "");
+			assert((lines.join("").match(/\x1b\[(?:38|48);2;/g) ?? []).length >= 12, `particle cloud vanished at ${t}ms, ${width}x${height}`);
+			return lines.join("");
+		});
+		assert.equal(new Set(particleFrames).size, particleFrames.length, "particle cloud must move through the handoff");
+	}
+	for (let first = 0; first <= 6; first++) {
+		const start = animationById("02", String(first), "2");
+		const opening = drawScene(118, 32, theme, { ...bw, muted: black }, start, 0, "/cwd", [], { cursor: 0, scroll: 0, top: 0, bottom: 0 }, "");
+		const tones = [...opening.join("").matchAll(/\x1b\[(?:38|48);2;(\d+);\d+;\d+m/g)].map(m => +m[1]);
+		assert(tones.includes(255) && tones.every(n => n === 0 || n >= 127), `badge ${first}: outer edge must not paint dim gray cells`);
+		if (first === 5) assert(tones.some(n => n > 127 && n < 250), "opening badge must retain internal shading");
+	}
 	assert.equal((sample[layout.menuTop].match(/\x1b\[48;2;255;255;255m/g) ?? []).length, layout.cardWidth - 4, "full-width highlight, including both top corners");
 	const bottomEdge = plain([sample[layout.menuTop + 1]])[0].slice(layout.left + 2, layout.left + layout.cardWidth - 2);
+	for (const top of [0.2, 0.3]) {
+		const moving = drawScene(118, 32, theme, bw, clip, clip.duration, "/cwd", [{ label: "pi-welcome插件", value: "1" }, { label: "新建会话", value: "2" }], { cursor: 1, scroll: 0, top, bottom: 0.8 }, "");
+		const row = moving[layout.menuTop];
+		assert(!/[▏-▟]/u.test(plain([row])[0]), "moving highlight must not draw a separate strip after the title");
+		assert.equal(row.includes("\x1b[48;2;255;255;255m"), top === 0.2, "the whole title row switches background at its midpoint");
+	}
 	assert.equal(new Set(bottomEdge).size, 1, "bottom corners must have the same height as the center");
 	for (const time of [5000, 5072, 5480]) {
 		if (time === 5000) longTitle.screen.handleInput("\x1b[B");
@@ -169,7 +196,7 @@ try {
 				else if (token.startsWith("\x1b[48;")) bg = token;
 				if (token === "\x1b[7m") inverse = true;
 				if (token === "\x1b[0m" || token === "\x1b[27m") inverse = false;
-				if (/^ {10,}$/.test(token)) assert(bg === "\x1b[48;2;12;17;23m" && !inverse, "blank margin must keep the palette background after clipped text");
+				if (/^ {10,}$/.test(token)) assert(bg === "default" && !inverse, "blank margin must keep the terminal background after clipped text");
 			}
 		}
 		if (time === 5480) assert(!rows[layout.menuTop].includes(";64;41;29m"), "no highlight remains on the previous row");
@@ -225,7 +252,8 @@ try {
 	editor.screen.handleInput("\t");
 	editor.screen.handleInput("\x1b[B");
 	chooser = editor.at(clip.duration + 10);
-	assert(chooser[0].includes("48;2;11;17;27"), "selected theme must immediately change preview background to its exact Markdown value");
+	assert.equal(chooser[0], " ".repeat(80), "theme picker must leave the terminal background untouched");
+	assert(chooser.some(line => line.includes("38;2;84;107;139")), "preview must still apply the selected border color");
 	assert.notDeepEqual(chooser, editor.at(clip.duration + 500), "preview must keep playing");
 	await editor.screen.handleInput("\r");
 	assert.deepEqual(saved, [{ first: "1", last: "1", animation: "03", palette: "极光青紫" }]);

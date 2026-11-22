@@ -28,10 +28,7 @@ export class Canvas {
 			this.cells[y].fill("", x + 1, x + used);
 			this.cells[y][x] = clipped;
 		}
-		const lines = this.cells.map((row) => row.join(""));
-		if (!this.colors.background) return lines;
-		const opening = this.theme.style(" ", { bg: this.colors.background }).split(" ")[0];
-		return lines.map((line) => this.theme.style(line.replaceAll("\x1b[49m", opening).replaceAll("\x1b[0m", "\x1b[0m" + opening), { bg: this.colors.background }));
+		return this.cells.map((row) => row.join(""));
 	}
 }
 
@@ -61,21 +58,28 @@ export function paintMenu(canvas: Canvas, items: Item[], x: number, y: number, w
 	const center = (start + end) / 2;
 	const mask = new Float32Array(64);
 	for (let row = Math.max(y, Math.floor(start)); row < Math.min(y + slots * pitch, end); row++) {
+		if ((row - y) % pitch === 0) {
+			// Text and its trailing padding share one terminal background.
+			if (row + 0.5 >= start && row + 0.5 < end) {
+				for (let i = 0; i < width; i++) canvas.cell(x + i, row, "█", colors.selection);
+			}
+			continue;
+		}
 		for (let v = 0; v < 8; v++) {
 			const lo = row + v / 8;
 			const coverage = clamp((Math.min(lo + 1 / 8, end) - Math.max(lo, start)) * 8);
 			mask.fill(4 * coverage, v * 8, (v + 1) * 8);
 		}
-		const strip = fitContour(mask);
-		for (let i = 0; i < width; i++) paintContour(canvas, x + i, row, strip, colors.selection, colors.background);
+		const strip = fitContour(mask, true);
+		for (let i = 0; i < width; i++) paintContour(canvas, x + i, row, strip, colors.selection);
 	}
 	for (let row = 0; row < slots; row++) {
 		const item = items[motion.scroll + row];
 		const rowY = y + row * pitch;
 		const overlap = clamp(Math.min(rowY + 1, end) - Math.max(rowY, start));
-		const bg = rowY + 0.5 >= start && rowY + 0.5 < end ? colors.selection : colors.background;
+		const bg = rowY + 0.5 >= start && rowY + 0.5 < end ? colors.selection : undefined;
 		const label = truncateToWidth(item.label, width - 4, "");
-		canvas.text(x + 3, rowY, theme.style(label, { fg: mixColors(colors.muted, colors.text, overlap, "srgb"), bg }), width - 4);
+		canvas.text(x + 3, rowY, theme.style(label, { fg: mixColors(colors.muted, colors.selectedText, overlap, "srgb"), bg }), width - 4);
 		if (Math.abs(rowY + 0.5 - center) > 0.7) canvas.text(x + 1, rowY, theme.style("•", { fg: colors.muted, bg }), 1);
 	}
 	const arrowY = Math.round(center - 0.5);
@@ -93,17 +97,24 @@ for (let n = 1; n <= 7; n++) {
 	contours.push(glyph(" ▏▎▍▌▋▊▉"[n], x => x < n), glyph(" ▁▂▃▄▅▆▇"[n], (_, y) => y >= 8 - n));
 }
 
-function fitContour(mask: Float32Array) {
+function fitContour(mask: Float32Array, solid = false) {
 	let total = 0;
 	for (const value of mask) total += value;
-	let best = { char: "█", inside: total / 256, outside: 0 };
+	let best = { char: "█", inside: solid ? Number(total >= 128) : total / 256, outside: 0 };
 	if (total === 0 || total === 256) return best;
 	// Two coverage means minimize squared error for a glyph; maximize the variance they explain.
 	let max = 0;
+	let error = Math.min(total, 256 - total);
 	for (const shape of contours) {
 		let sum = 0;
 		for (const i of shape.pixels) sum += mask[i];
 		const n = shape.pixels.length, inside = sum / (4 * n), outside = (total - sum) / (4 * (64 - n));
+		if (solid) {
+			// Choose the block (or its complement) that disagrees with the fewest ink samples.
+			const miss = 4 * n - sum + (total - sum), loss = Math.min(miss, 256 - miss);
+			if (loss < error) { best = { char: shape.char, inside: Number(miss < 128), outside: Number(miss >= 128) }; error = loss; }
+			continue;
+		}
 		const score = n * (64 - n) * (inside - outside) ** 2;
 		if (score > max) { best = { char: shape.char, inside, outside }; max = score; }
 	}
@@ -113,6 +124,7 @@ function fitContour(mask: Float32Array) {
 function paintContour(canvas: Canvas, x: number, y: number, shape: ReturnType<typeof fitContour>, color: Color, bg?: Color) {
 	const { char, inside, outside } = shape;
 	if (!inside && !outside) return;
+	if (!inside && outside === 1 && !bg) { canvas.cell(x, y, char, color, undefined, true); return; }
 	const shade = (a: number) => a >= 1 ? color : mixColors(bg ?? canvas.colors.base, color, a, "srgb");
 	if (inside >= outside) canvas.cell(x, y, char, shade(inside), outside ? shade(outside) : bg);
 	else canvas.cell(x, y, char, shade(outside), inside ? shade(inside) : bg, true);
@@ -140,6 +152,7 @@ export function drawScene(width: number, height: number, theme: Theme, colors: P
 	const layout = welcomeLayout(width, height, items.length);
 	const { left, cardWidth, logoWidth, logoRows, logoX, top, frameTop, menuTop, slots, pitch, footer, bottom, stacked } = layout;
 	const frame = frameAt(clip, elapsed);
+	const badge = frame.badge ?? (frame.at < 350 && ["02", "03", "04"].includes(clip.id));
 	const revealAt = menuAt(clip);
 	const path = borderPath(left, frameTop, left + cardWidth - 1, bottom, logoX - 1, logoX + logoWidth + 1);
 	const reveal = clamp((elapsed - (revealAt - 600)) / 600);
@@ -157,7 +170,7 @@ export function drawScene(width: number, height: number, theme: Theme, colors: P
 	for (let y = Math.max(0, Math.floor(originY + y0 / scaleY)); y < Math.min(height, originY + y1 / scaleY); y++) {
 		for (let x = Math.max(0, Math.floor(originX + x0 / scaleX)); x < Math.min(width, originX + x1 / scaleX); x++) {
 			ink.fill(0); ring.fill(0);
-			let inkCount = 0, ringCount = 0;
+			let inkCount = 0, ringCount = 0, inkTone = 0, ringTone = 0;
 			for (let v = 0; v < 16; v++) {
 				const sy = Math.floor((y + (v + 0.5) / 16 - originY) * scaleY);
 				if (sy < y0 || sy >= y1) continue;
@@ -166,14 +179,34 @@ export function drawScene(width: number, height: number, theme: Theme, colors: P
 					const col = xs[x * 16 + u];
 					if (col < 0 || col >= x1 - x0) continue;
 					const bin = (v >> 1) * 8 + (u >> 1);
-					const a = inkCoverage[frame.ink.charCodeAt(row + col)], b = ringCoverage[frame.circle.charCodeAt(row + col)] * (1 - a);
+					let a = inkCoverage[frame.ink.charCodeAt(row + col)], b = ringCoverage[frame.circle.charCodeAt(row + col)];
+					if (badge) {
+						// Shading belongs to the painted samples, not to the whole edge cell.
+						if (a >= 0.5) inkTone += a;
+						a = Number(a >= 0.5);
+						if (!a && b > 0 && (frame.badge || b >= 0.5)) { ringTone += b; b = 1; }
+						else b = 0;
+					} else b *= 1 - a;
 					ink[bin] += a; ring[bin] += b; inkCount += a; ringCount += b;
 				}
 			}
 			if (!inkCount && !ringCount) continue;
+			if (badge) {
+				const disc = ringCount && frame.badge ? mixColors(colors.base, ringColor, ringTone / ringCount, "srgb") : ringColor;
+				const shape = fitContour(inkCount ? ink : ring, true);
+				if (!inkCount || (!shape.inside && !shape.outside)) {
+					if (ringCount) paintContour(canvas, x, y, inkCount ? fitContour(ring, true) : shape, disc);
+				} else {
+					const bg = ringCount && ringCount >= (256 - inkCount) / 2 ? disc : undefined;
+					const inkColor = flowingColor((x - logoX) / Math.max(1, logoWidth - 1), elapsed, colors);
+					const fg = frame.badge && inkTone < inkCount ? mixColors(bg ?? colors.base, inkColor, inkTone / inkCount, "srgb") : inkColor;
+					paintContour(canvas, x, y, shape, fg, bg);
+				}
+				continue;
+			}
 			const fg = inkCount ? flowingColor((x - logoX) / Math.max(1, logoWidth - 1), elapsed, colors) : ringColor;
-			const bg = inkCount && ringCount ? mixColors(colors.base, ringColor, clamp(ringCount / (256 - inkCount)), "srgb") : colors.background;
-			paintContour(canvas, x, y, fitContour(inkCount ? ink : ring), fg, bg);
+			const bg = inkCount && ringCount ? mixColors(colors.base, ringColor, clamp(ringCount / (256 - inkCount)), "srgb") : undefined;
+			paintContour(canvas, x, y, fitContour(inkCount ? ink : ring, frame.solid), fg, bg);
 		}
 	}
 	const pathX = stacked ? left + 2 : logoX + logoWidth + 2;

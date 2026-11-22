@@ -14,12 +14,12 @@ from pathlib import Path
 
 colors = {"original": None}
 for table in sorted((Path(__file__).resolve().parents[1] / "assets/Color").glob("*.md")):
-    colors.update(re.findall(r"\| \*\*(.+?)\*\* \| `#(\w{6})`", table.read_text()))
+    colors.update(re.findall(r"\| \*\*(.+?)\*\* \| `#\w{6}` \| `#(\w{6})`", table.read_text()))
 settings = Path(os.environ.get("PI_CODING_AGENT_DIR", Path.home() / ".pi/agent")) / "pi-welcome.json"
 palette = json.loads(settings.read_text()).get("palette", "original") if settings.exists() else "original"
 steps = 1 if list(colors).index(palette) < len(colors) - 1 else 2
-expected_bg = list(colors.values())[(list(colors).index(palette) + steps) % len(colors)]
-expected_sgr = ("48;2;" + ";".join(map(str, bytes.fromhex(expected_bg)))).encode()
+expected_border = list(colors.values())[(list(colors).index(palette) + steps) % len(colors)]
+expected_sgr = ("38;2;" + ";".join(map(str, bytes.fromhex(expected_border)))).encode()
 
 for history_count in [0, 1, 8]:
     with tempfile.TemporaryDirectory(prefix="pi-welcome-keys-") as root:

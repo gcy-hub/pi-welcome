@@ -9,19 +9,19 @@
 已在 Pi 1.5.0 的交互模式下测试。推荐用 Pi 从 GitHub 安装固定版本：
 
 ```sh
-pi install git:github.com/gcy-hub/pi-welcome@v1.1.1
+pi install git:github.com/gcy-hub/pi-welcome@v1.1.2
 ```
 
 重新启动 `pi` 即可看到欢迎页。若已打开 Pi，可先执行 `/reload`，再输入 `/welcome`。
 
-**离线安装：** 下载 [pi-welcome-1.1.1.zip](https://github.com/gcy-hub/pi-welcome/releases/download/v1.1.1/pi-welcome-1.1.1.zip)，解压到准备长期保留的目录，再从其上一级运行：
+**离线安装：** 下载 [pi-welcome-1.1.2.zip](https://github.com/gcy-hub/pi-welcome/releases/download/v1.1.2/pi-welcome-1.1.2.zip)，解压到准备长期保留的目录，再从其上一级运行：
 
 ```sh
-unzip pi-welcome-1.1.1.zip
-pi install ./pi-welcome-1.1.1
+unzip pi-welcome-1.1.2.zip
+pi install ./pi-welcome-1.1.2
 ```
 
-本地路径安装会直接使用解压目录，请保留它。若之前已手动安装到 `~/.pi/agent/extensions/pi-welcome/`，请只保留一种安装方式，避免重复注册命令。卸载 GitHub 版本：`pi remove git:github.com/gcy-hub/pi-welcome@v1.1.1`。
+本地路径安装会直接使用解压目录，请保留它。若之前已手动安装到 `~/.pi/agent/extensions/pi-welcome/`，请只保留一种安装方式，避免重复注册命令。卸载 GitHub 版本：`pi remove git:github.com/gcy-hub/pi-welcome@v1.1.2`。
 
 ## 选择会话
 
@@ -52,7 +52,7 @@ pi install ./pi-welcome-1.1.1
 
 用 `Tab` 或 `←` / `→` 切换列，`↑` / `↓` 试选。`Enter` 保存并重播新组合，随后进入会话选择；`Esc` 取消本次修改。设置保存在 Pi 配置目录的 `pi-welcome.json`，不会修改聊天界面或终端的全局主题。
 
-可自由组合 **8 个开场动画和 14 套配色**。默认是「粒子聚合 × 原始蓝紫」，图中使用「粒子聚合 × NVIDIA 黑绿」。另有纸白荧紫等浅色方案；[配色表与色卡](assets/Color/)列出了 13 套素材配色的 RGB 值，原始蓝紫随终端背景自适应。
+可自由组合 **8 个开场动画和 14 套配色**。默认是「粒子聚合 × 原始蓝紫」。所有配色都沿用终端背景；切换配色只改变图标、边框、选中行和强调色。[配色表与色卡](assets/Color/)列出了 13 套素材配色的 RGB 值。
 
 ## 开发
 
